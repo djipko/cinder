@@ -488,6 +488,11 @@ class API(base.Base):
                 if i['key'] == key:
                     return i['value']
         return None
+    
+    @wrap_check_policy
+    def get_volume_glance_metadata(self, context, volume):
+        rv = self.db.volume_glance_metadata_get(context, volume['id'])
+        return dict(rv)
 
     def _check_volume_availability(self, context, volume, force):
         """Check if the volume can be used."""
