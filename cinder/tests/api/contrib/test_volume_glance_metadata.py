@@ -17,15 +17,16 @@
 import datetime
 import json
 import uuid
-
 from xml.dom import minidom
+
 import webob
 
-from cinder import test
-from cinder import volume
 from cinder.api import common
-from cinder.api.openstack.wsgi import XMLDeserializer, MetadataXMLDeserializer
-from cinder.tests.api.openstack import fakes
+from cinder.api.openstack.wsgi import MetadataXMLDeserializer
+from cinder.api.openstack.wsgi import XMLDeserializer
+from cinder import test
+from cinder.tests.api import fakes
+from cinder import volume
 
 
 def fake_volume_get(*args, **kwargs):
@@ -63,7 +64,7 @@ def fake_get_volume_glance_metadata(*args, **kwargs):
 
 class VolumeGlanceMetadataTest(test.TestCase):
     content_type = 'application/json'
-    
+
     def setUp(self):
         super(VolumeGlanceMetadataTest, self).setUp()
         self.stubs.Set(volume.API, 'get', fake_volume_get)
@@ -71,7 +72,7 @@ class VolumeGlanceMetadataTest(test.TestCase):
         self.stubs.Set(volume.API, 'get_volume_glance_metadata',
                        fake_get_volume_glance_metadata)
         self.UUID = uuid.uuid4()
-        
+
     def _make_request(self, url):
         req = webob.Request.blank(url)
         req.accept = self.content_type
@@ -80,7 +81,7 @@ class VolumeGlanceMetadataTest(test.TestCase):
 
     def _get_glance_metadata(self, body):
         return json.loads(body)['volume']['volume_glance_metadata']
-        
+
     def _get_glance_metadata_list(self, body):
         return [
             volume['volume_glance_metadata']
@@ -88,17 +89,17 @@ class VolumeGlanceMetadataTest(test.TestCase):
         ]
 
     def test_get_volume(self):
-        res = self._make_request('/v1/fake/volumes/%s' % self.UUID)
+        res = self._make_request('/v2/fake/volumes/%s' % self.UUID)
         self.assertEqual(res.status_int, 200)
         self.assertEqual(self._get_glance_metadata(res.body),
                          fake_glance_metadata)
 
     def test_list_detail_volumes(self):
-        res = self._make_request('/v1/fake/volumes/detail')
+        res = self._make_request('/v2/fake/volumes/detail')
         self.assertEqual(res.status_int, 200)
         self.assertEqual(self._get_glance_metadata_list(res.body)[0],
                          fake_glance_metadata)
-        
+
 
 class GlanceMetadataXMLDeserializer(common.MetadataXMLDeserializer):
     metadata_node_name = "volume_glance_metadata"
@@ -106,22 +107,24 @@ class GlanceMetadataXMLDeserializer(common.MetadataXMLDeserializer):
 
 class VolumeGlanceMetadataXMLTest(VolumeGlanceMetadataTest):
     content_type = 'application/xml'
-    
+
     def _get_glance_metadata(self, body):
         deserializer = XMLDeserializer()
         volume = deserializer.find_first_child_named(
-            minidom.parseString(body),'volume')
-        glance_metadata = deserializer.find_first_child_named(volume,
-                                                              'volume_glance_metadata')
+            minidom.parseString(body), 'volume')
+        glance_metadata = deserializer.find_first_child_named(
+            volume, 'volume_glance_metadata')
         return MetadataXMLDeserializer().extract_metadata(glance_metadata)
 
     def _get_glance_metadata_list(self, body):
         deserializer = XMLDeserializer()
         volumes = deserializer.find_first_child_named(
-            minidom.parseString(body),'volumes')
-        volume_list = deserializer.find_children_named(
-            volumes,'volume')
+            minidom.parseString(body), 'volumes')
+        volume_list = deserializer.find_children_named(volumes, 'volume')
         glance_metadata_list = [
-            deserializer.find_first_child_named(volume, 'volume_glance_metadata')
+            deserializer.find_first_child_named(
+                volume, 'volume_glance_metadata'
+            )
             for volume in volume_list]
-        return map(MetadataXMLDeserializer().extract_metadata, glance_metadata_list)
+        return map(MetadataXMLDeserializer().extract_metadata,
+                   glance_metadata_list)

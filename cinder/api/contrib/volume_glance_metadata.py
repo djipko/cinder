@@ -14,10 +14,10 @@
 
 """The Volume Glance Metadata API extension."""
 
-from cinder import volume
 from cinder.api import extensions
-from cinder.api import xmlutil
 from cinder.api.openstack import wsgi
+from cinder.api import xmlutil
+from cinder import volume
 
 
 authorize = extensions.soft_extension_authorizer('volume',
@@ -28,7 +28,7 @@ class VolumeGlanceMetadataController(wsgi.Controller):
     def __init__(self, *args, **kwargs):
         super(VolumeGlanceMetadataController, self).__init__(*args, **kwargs)
         self.volume_api = volume.API()
-        
+
     def _add_glance_metadata(self, context, resp_volume):
         try:
             glance_meta = self.volume_api.get_volume_glance_metadata(
@@ -46,7 +46,7 @@ class VolumeGlanceMetadataController(wsgi.Controller):
         if authorize(context):
             resp_obj.attach(xml=VolumeGlanceMetadataTemplate())
             self._add_glance_metadata(context, resp_obj.obj['volume'])
-            
+
     @wsgi.extends
     def detail(self, req, resp_obj):
         context = req.environ['cinder.context']
@@ -64,7 +64,7 @@ class Volume_glance_metadata(extensions.ExtensionDescriptor):
     namespace = ("http://docs.openstack.org/volume/ext/"
                  "volume_glance_metadata/api/v1")
     updated = "2012-12-07T00:00:00+00:00"
-    
+
     def get_controller_extensions(self):
         controller = VolumeGlanceMetadataController()
         extension = extensions.ControllerExtension(self, 'volumes', controller)
