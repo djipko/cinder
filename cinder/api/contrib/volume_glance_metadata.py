@@ -51,6 +51,7 @@ class VolumeGlanceMetadataController(wsgi.Controller):
     def detail(self, req, resp_obj):
         context = req.environ['cinder.context']
         if authorize(context):
+            resp_obj.attach(xml=VolumesGlanceMetadataTemplate())
             for volume in list(resp_obj.obj['volumes']):
                 self._add_glance_metadata(context, volume)
 
@@ -86,6 +87,18 @@ class VolumeGlanceMetadataTemplate(xmlutil.TemplateBuilder):
     def construct(self):
         root = xmlutil.TemplateElement('volume', selector='volume')
         root.append(VolumeGlanceMetadataMetadataTemplate())
+
+        alias = Volume_glance_metadata.alias
+        namespace = Volume_glance_metadata.namespace
+
+        return xmlutil.SlaveTemplate(root, 1, nsmap={alias: namespace})
+
+
+class VolumesGlanceMetadataTemplate(xmlutil.TemplateBuilder):
+    def construct(self):
+        root = xmlutil.TemplateElement('volumes')
+        elem = xmlutil.SubTemplateElement(root, 'volume', selector='volume')
+        elem.append(VolumeGlanceMetadataMetadataTemplate())
 
         alias = Volume_glance_metadata.alias
         namespace = Volume_glance_metadata.namespace

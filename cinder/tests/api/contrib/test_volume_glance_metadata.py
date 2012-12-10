@@ -113,8 +113,15 @@ class VolumeGlanceMetadataXMLTest(VolumeGlanceMetadataTest):
             minidom.parseString(body),'volume')
         glance_metadata = deserializer.find_first_child_named(volume,
                                                               'volume_glance_metadata')
-
         return MetadataXMLDeserializer().extract_metadata(glance_metadata)
 
     def _get_glance_metadata_list(self, body):
-        pass
+        deserializer = XMLDeserializer()
+        volumes = deserializer.find_first_child_named(
+            minidom.parseString(body),'volumes')
+        volume_list = deserializer.find_children_named(
+            volumes,'volume')
+        glance_metadata_list = [
+            deserializer.find_first_child_named(volume, 'volume_glance_metadata')
+            for volume in volume_list]
+        return map(MetadataXMLDeserializer().extract_metadata, glance_metadata_list)
