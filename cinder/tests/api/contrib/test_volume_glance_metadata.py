@@ -18,12 +18,13 @@ import datetime
 import json
 import uuid
 
-from lxml import etree
+from xml.dom import minidom
 import webob
 
-from cinder import context
 from cinder import test
 from cinder import volume
+from cinder.api import common
+from cinder.api.openstack.wsgi import XMLDeserializer, MetadataXMLDeserializer
 from cinder.tests.api.openstack import fakes
 
 
@@ -60,78 +61,60 @@ def fake_get_volume_glance_metadata(*args, **kwargs):
     return fake_glance_metadata
 
 
-def app():
-    # no auth, just let environ['cinder.context'] pass through
-    api = fakes.router.APIRouter()
-    mapper = fakes.urlmap.URLMap()
-    mapper['/v1'] = api
-    return mapper
-
-
-class VolumeGlanceMetadata(test.TestCase):
+class VolumeGlanceMetadataTest(test.TestCase):
+    content_type = 'application/json'
     
     def setUp(self):
-        super(VolumeGlanceMetadata, self).setUp()
+        super(VolumeGlanceMetadataTest, self).setUp()
         self.stubs.Set(volume.API, 'get', fake_volume_get)
         self.stubs.Set(volume.API, 'get_all', fake_volume_get_all)
         self.stubs.Set(volume.API, 'get_volume_glance_metadata',
                        fake_get_volume_glance_metadata)
         self.UUID = uuid.uuid4()
+        
+    def _make_request(self, url):
+        req = webob.Request.blank(url)
+        req.accept = self.content_type
+        res = req.get_response(fakes.wsgi_app())
+        return res
 
-    def test_get_volume_allowed(self):
-        ctx = context.RequestContext('admin', 'fake', True)
-        req = webob.Request.blank('/v1/fake/volumes/%s' % self.UUID)
-        req.method = 'GET'
-        req.environ['cinder.context'] = ctx
-        res = req.get_response(app())
-        vol = json.loads(res.body)['volume']
-        self.assertTrue('volume_glance_metadata' in vol)
-        self.assertEqual(vol['volume_glance_metadata'], fake_glance_metadata)
+    def _get_glance_metadata(self, body):
+        return json.loads(body)['volume']['volume_glance_metadata']
+        
+    def _get_glance_metadata_list(self, body):
+        return [
+            volume['volume_glance_metadata']
+            for volume in json.loads(body)['volumes']
+        ]
 
-    def test_get_volume_unallowed(self):
-        ctx = context.RequestContext('non-admin', 'fake', False)
-        req = webob.Request.blank('/v1/fake/volumes/%s' % self.UUID)
-        req.method = 'GET'
-        req.environ['cinder.context'] = ctx
-        res = req.get_response(app())
-        vol = json.loads(res.body)['volume']
-        self.assertFalse('volume_glance_metadata' in vol)
+    def test_get_volume(self):
+        res = self._make_request('/v1/fake/volumes/%s' % self.UUID)
+        self.assertEqual(res.status_int, 200)
+        self.assertEqual(self._get_glance_metadata(res.body),
+                         fake_glance_metadata)
 
-    def test_list_detail_volumes_allowed(self):
-        ctx = context.RequestContext('admin', 'fake', True)
-        req = webob.Request.blank('/v1/fake/volumes/detail')
-        req.method = 'GET'
-        req.environ['cinder.context'] = ctx
-        res = req.get_response(app())
-        vol = json.loads(res.body)['volumes']
-        self.assertTrue('volume_glance_metadata' in vol[0])
-        self.assertEqual(vol[0]['volume_glance_metadata'], fake_glance_metadata)
+    def test_list_detail_volumes(self):
+        res = self._make_request('/v1/fake/volumes/detail')
+        self.assertEqual(res.status_int, 200)
+        self.assertEqual(self._get_glance_metadata_list(res.body)[0],
+                         fake_glance_metadata)
+        
 
-    def test_list_detail_volumes_unallowed(self):
-        ctx = context.RequestContext('non-admin', 'fake', False)
-        req = webob.Request.blank('/v1/fake/volumes/detail')
-        req.method = 'GET'
-        req.environ['cinder.context'] = ctx
-        res = req.get_response(app())
-        vol = json.loads(res.body)['volumes']
-        self.assertFalse('volume_glance_metadata' in vol[0])
+class GlanceMetadataXMLDeserializer(common.MetadataXMLDeserializer):
+    metadata_node_name = "volume_glance_metadata"
 
-    def test_get_volume_xml(self):
-        ctx = context.RequestContext('admin', 'fake', True)
-        req = webob.Request.blank('/v1/fake/volumes/%s' % self.UUID)
-        req.method = 'GET'
-        req.accept = 'application/xml'
-        req.environ['cinder.context'] = ctx
-        res = req.get_response(app())
-        vol = etree.XML(res.body)
-        vol.get('volume_glance_metadata')
 
-    def test_list_volumes_detail_xml(self):
-        ctx = context.RequestContext('admin', 'fake', True)
-        req = webob.Request.blank('/v1/fake/volumes/detail')
-        req.method = 'GET'
-        req.accept = 'application/xml'
-        req.environ['cinder.context'] = ctx
-        res = req.get_response(app())
-        vol = list(etree.XML(res.body))[0]
-        vol.get('volume_glance_metadata')
+class VolumeGlanceMetadataXMLTest(VolumeGlanceMetadataTest):
+    content_type = 'application/xml'
+    
+    def _get_glance_metadata(self, body):
+        deserializer = XMLDeserializer()
+        volume = deserializer.find_first_child_named(
+            minidom.parseString(body),'volume')
+        glance_metadata = deserializer.find_first_child_named(volume,
+                                                              'volume_glance_metadata')
+
+        return MetadataXMLDeserializer().extract_metadata(glance_metadata)
+
+    def _get_glance_metadata_list(self, body):
+        pass

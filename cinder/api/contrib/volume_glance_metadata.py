@@ -16,6 +16,7 @@
 
 from cinder import volume
 from cinder.api import extensions
+from cinder.api import xmlutil
 from cinder.api.openstack import wsgi
 
 
@@ -40,9 +41,10 @@ class VolumeGlanceMetadataController(wsgi.Controller):
                     glance_meta.iteritems())
 
     @wsgi.extends
-    def show(context, req, resp, id):
+    def show(self, req, resp_obj, id):
         context = req.environ['cinder.context']
         if authorize(context):
+            resp_obj.attach(xml=VolumeGlanceMetadataTemplate())
             self._add_glance_metadata(context, resp_obj.obj['volume'])
             
     @wsgi.extends
@@ -50,7 +52,7 @@ class VolumeGlanceMetadataController(wsgi.Controller):
         context = req.environ['cinder.context']
         if authorize(context):
             for volume in list(resp_obj.obj['volumes']):
-                self._add_volume_tenant_attribute(context, volume)
+                self._add_glance_metadata(context, volume)
 
 
 class Volume_glance_metadata(extensions.ExtensionDescriptor):
@@ -66,3 +68,26 @@ class Volume_glance_metadata(extensions.ExtensionDescriptor):
         controller = VolumeGlanceMetadataController()
         extension = extensions.ControllerExtension(self, 'volumes', controller)
         return [extension]
+
+
+class VolumeGlanceMetadataMetadataTemplate(xmlutil.TemplateBuilder):
+    def construct(self):
+        root = xmlutil.TemplateElement('volume_glance_metadata',
+                                       selector='volume_glance_metadata')
+        elem = xmlutil.SubTemplateElement(root, 'meta',
+                                          selector=xmlutil.get_items)
+        elem.set('key', 0)
+        elem.text = 1
+
+        return xmlutil.MasterTemplate(root, 1)
+
+
+class VolumeGlanceMetadataTemplate(xmlutil.TemplateBuilder):
+    def construct(self):
+        root = xmlutil.TemplateElement('volume', selector='volume')
+        root.append(VolumeGlanceMetadataMetadataTemplate())
+
+        alias = Volume_glance_metadata.alias
+        namespace = Volume_glance_metadata.namespace
+
+        return xmlutil.SlaveTemplate(root, 1, nsmap={alias: namespace})
