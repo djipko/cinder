@@ -52,7 +52,7 @@ class VolumeGlanceMetadataController(wsgi.Controller):
         context = req.environ['cinder.context']
         if authorize(context):
             resp_obj.attach(xml=VolumesGlanceMetadataTemplate())
-            for volume in list(resp_obj.obj['volumes']):
+            for volume in list(resp_obj.obj.get('volumes', [])):
                 self._add_glance_metadata(context, volume)
 
 
